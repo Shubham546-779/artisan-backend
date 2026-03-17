@@ -1,4 +1,3 @@
-
 const express  = require('express');
 const bcrypt   = require('bcryptjs');
 const jwt      = require('jsonwebtoken');
@@ -11,7 +10,6 @@ const { validate, asyncWrap } = require('../middleware/errors');
 
 const router = express.Router();
 
-// ── Helper ─────────────────────────────────────────────────────────────────
 function signToken(user) {
   return jwt.sign(
     { id: user.id, email: user.email, role: user.role, name: user.name },
@@ -25,7 +23,6 @@ function safeUser(user) {
   return safe;
 }
 
-// ── POST /register ─────────────────────────────────────────────────────────
 router.post(
   '/register',
   [
@@ -37,22 +34,17 @@ router.post(
   validate,
   asyncWrap(async (req, res) => {
     const { name, email, password, role, shopName } = req.body;
-
-const existing = db.findOne(
-  'users',
-  u => u.email.toLowerCase() === email.toLowerCase()
-);
+    const existing = db.findOne('users', u => u.email.toLowerCase() === email.toLowerCase());
     if (existing) {
       return res.status(409).json({ error: 'Email already registered' });
     }
-
     const passwordHash = await bcrypt.hash(password, 10);
     const user = {
       id:           uuidv4(),
       name,
       email,
       passwordHash,
-      role,                            // 'buyer' | 'seller'
+      role,
       shopName:     role === 'seller' ? (shopName || name + "'s Workshop") : null,
       avatarUrl:    null,
       bio:          null,
@@ -63,14 +55,12 @@ const existing = db.findOne(
       reviewCount:  0,
       rating:       0,
     };
-
     db.insert('users', user);
     const token = signToken(user);
     res.status(201).json({ token, user: safeUser(user) });
   })
 );
 
-// ── POST /login ────────────────────────────────────────────────────────────
 router.post(
   '/login',
   [
@@ -80,29 +70,21 @@ router.post(
   validate,
   asyncWrap(async (req, res) => {
     const { email, password } = req.body;
-
-const user = db.findOne(
-  'users',
-  u => u.email.toLowerCase() === email.toLowerCase()
-);
+    const user = db.findOne('users', u => u.email.toLowerCase() === email.toLowerCase());
     if (!user) return res.status(401).json({ error: 'Invalid credentials' });
-
     const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
-
     const token = signToken(user);
     res.json({ token, user: safeUser(user) });
   })
 );
 
-// ── GET /me ────────────────────────────────────────────────────────────────
 router.get('/me', authenticate, asyncWrap(async (req, res) => {
   const user = db.findOne('users', u => u.id === req.user.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
   res.json(safeUser(user));
 }));
 
-// ── PUT /me ────────────────────────────────────────────────────────────────
 router.put(
   '/me',
   authenticate,
@@ -118,14 +100,12 @@ router.put(
     const allowed = ['name', 'bio', 'location', 'shopName', 'avatarUrl'];
     const patch   = {};
     allowed.forEach(k => { if (req.body[k] !== undefined) patch[k] = req.body[k]; });
-
     db.update('users', u => u.id === req.user.id, patch);
     const updated = db.findOne('users', u => u.id === req.user.id);
     res.json(safeUser(updated));
   })
 );
 
-// ── POST /change-password ──────────────────────────────────────────────────
 router.post(
   '/change-password',
   authenticate,
@@ -138,9 +118,10 @@ router.post(
     const user  = db.findOne('users', u => u.id === req.user.id);
     const valid = await bcrypt.compare(req.body.currentPassword, user.passwordHash);
     if (!valid) return res.status(401).json({ error: 'Current password incorrect' });
-
     const passwordHash = await bcrypt.hash(req.body.newPassword, 10);
     db.update('users', u => u.id === req.user.id, { passwordHash });
     res.json({ message: 'Password updated successfully' });
   })
 );
+
+module.exports = router;
