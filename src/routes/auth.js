@@ -5,7 +5,7 @@ const { v4: uuidv4 } = require('uuid');
 const { body } = require('express-validator');
 
 const db = require('../db/db');
-const { authenticate }       = require('../middleware/auth');
+const { authenticate }        = require('../middleware/auth');
 const { validate, asyncWrap } = require('../middleware/errors');
 
 const router = express.Router();
@@ -85,6 +85,7 @@ router.get('/me', authenticate, asyncWrap(async (req, res) => {
   res.json(safeUser(user));
 }));
 
+// ✅ FIXED: allows role update and returns a fresh token
 router.put(
   '/me',
   authenticate,
@@ -94,15 +95,28 @@ router.put(
     body('location').optional().trim(),
     body('shopName').optional().trim(),
     body('avatarUrl').optional().isURL(),
+    body('role').optional().isIn(['buyer', 'seller']),
   ],
   validate,
   asyncWrap(async (req, res) => {
-    const allowed = ['name', 'bio', 'location', 'shopName', 'avatarUrl'];
+    const allowed = ['name', 'bio', 'location', 'shopName', 'avatarUrl', 'role'];
     const patch   = {};
     allowed.forEach(k => { if (req.body[k] !== undefined) patch[k] = req.body[k]; });
+
+    // Auto-set shopName when upgrading to seller if not already set
+    if (patch.role === 'seller') {
+      const current = db.findOne('users', u => u.id === req.user.id);
+      if (!current.shopName && !patch.shopName) {
+        patch.shopName = current.name + "'s Workshop";
+      }
+    }
+
     db.update('users', u => u.id === req.user.id, patch);
     const updated = db.findOne('users', u => u.id === req.user.id);
-    res.json(safeUser(updated));
+
+    // Issue a new token so the updated role takes effect immediately
+    const token = signToken(updated);
+    res.json({ ...safeUser(updated), token });
   })
 );
 
