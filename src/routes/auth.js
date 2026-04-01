@@ -99,7 +99,7 @@ router.put(
   ],
   validate,
   asyncWrap(async (req, res) => {
-    const allowed = ['name', 'bio', 'location', 'shopName', 'avatarUrl', 'role'];
+const allowed = ['name', 'bio', 'location', 'shopName', 'avatarUrl', 'role'];
     const patch   = {};
     allowed.forEach(k => { if (req.body[k] !== undefined) patch[k] = req.body[k]; });
 
